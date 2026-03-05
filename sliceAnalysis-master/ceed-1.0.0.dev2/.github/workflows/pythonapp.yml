@@ -1,0 +1,174 @@
+name: Python application
+
+on: [push, pull_request]
+
+jobs:
+  lint_test:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v1
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.7
+    - name: Install dependencies
+      run: |
+        python3 -m pip install --upgrade pip virtualenv wheel setuptools
+    - name: Lint with pycodestyle
+      run: |
+        python3 -m pip install flake8
+        python3 -m flake8 . --count --ignore=E125,E126,E127,E128,E402,E741,E731,W503,F401,W504,F841 --show-source --statistics --max-line-length=80 --exclude=__pycache__,.tox,.git/,doc/
+
+  linux_test:
+    runs-on: ubuntu-18.04
+    env:
+      DISPLAY: :99.0
+    steps:
+    - uses: actions/checkout@v1
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.7
+    - name: Make sdist
+      run: python3 setup.py sdist --formats=gztar
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt -y install libsdl2-dev libsdl2-ttf-dev libsdl2-image-dev libsdl2-mixer-dev
+        sudo apt-get -y install python3-setuptools build-essential libgl1-mesa-dev libgles2-mesa-dev
+        sudo apt -y install wget unzip
+        /sbin/start-stop-daemon --start --quiet --pidfile /tmp/custom_xvfb_99.pid --make-pidfile --background --exec /usr/bin/Xvfb -- :99 -screen 0 1280x720x24 -ac +extension GLX
+
+        python3 -m pip install --upgrade pip virtualenv wheel setuptools coveralls
+        python3 -m pip install -e .[dev]
+        python3 -m pip uninstall pytest-asyncio -y
+
+        wget https://github.com/matham/ceed/releases/download/v1.0.0.dev0/ceed_data_v1.0.0.dev0.zip
+        unzip ceed_data_v1.0.0.dev0.zip -d ceed/examples/data/
+        wget https://github.com/matham/ceed/releases/download/v1.0.0.dev0/ceed_data_v1.0.0.dev1.zip
+        unzip ceed_data_v1.0.0.dev1.zip -d ceed/examples/data/
+    - name: Make wheel
+      run: python3 setup.py bdist_wheel --universal
+    - name: Upload wheels as artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: wheels
+        path: dist
+    - name: Upload to GitHub Release
+      uses: softprops/action-gh-release@78c309ef59fdb9557cd6574f2e0be552936ed728
+      if: startsWith(github.ref, 'refs/tags/')
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: dist/*
+    - name: Publish to PyPI
+      if: startsWith(github.ref, 'refs/tags/')
+      env:
+        TWINE_USERNAME: "__token__"
+        TWINE_PASSWORD: ${{ secrets.pypi_password }}
+      run: |
+        python -m pip install twine
+        twine upload dist/*
+    - name: Test with pytest
+      run: |
+        COVERAGE_PROCESS_START=1 python3 -m pytest --cov=ceed --cov-report term --cov-branch ceed/tests
+    - name: Coveralls upload
+      run: python3 -m coveralls
+      env:
+        COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+
+  windows_test:
+    runs-on: windows-latest
+    env:
+      KIVY_GL_BACKEND: angle_sdl2
+    steps:
+    - uses: actions/checkout@v1
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.7
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip virtualenv wheel setuptools pyinstaller
+        python -c "import os, PyInstaller; os.remove(os.path.join(os.path.dirname(PyInstaller.__file__), 'hooks', 'hook-kivy.py'))"
+        python -m pip install -e .[dev]
+        python -m pip uninstall pytest-asyncio -y
+
+        Invoke-WebRequest "https://github.com/matham/ceed/releases/download/v1.0.0.dev0/ceed_data_v1.0.0.dev0.zip" -OutFile "ceed_data_v1.0.0.dev0.zip"
+        Expand-Archive -LiteralPath .\ceed_data_v1.0.0.dev0.zip -DestinationPath .\ceed\examples\data\
+        Invoke-WebRequest "https://github.com/matham/ceed/releases/download/v1.0.0.dev0/ceed_data_v1.0.0.dev1.zip" -OutFile "ceed_data_v1.0.0.dev1.zip"
+        Expand-Archive -LiteralPath .\ceed_data_v1.0.0.dev1.zip -DestinationPath .\ceed\examples\data\
+    - name: Make PyInstaller app
+      if: startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[build app]')
+      run: |
+        cd packaging
+        python -m PyInstaller ceed_exe.spec
+    - name: Upload app as artifact
+      if: startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[build app]')
+      uses: actions/upload-artifact@v2
+      with:
+        name: app
+        path: packaging/dist
+    - name: Upload to GitHub Release
+      uses: softprops/action-gh-release@78c309ef59fdb9557cd6574f2e0be552936ed728
+      if: startsWith(github.ref, 'refs/tags/')
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: packaging/dist/*
+    - name: Test with pytest
+      run: python -m pytest --cov=ceed --cov-report term --cov-branch --ceed-no-single-pixel ceed/tests
+
+  docs:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v1
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.7
+    - name: Install dependencies
+      env:
+          KIVY_DOC_INCLUDE: 1
+          KIVY_DOC: 1
+      run: |
+        python3 -m pip install --upgrade pip virtualenv wheel setuptools sphinx
+        python3 -m pip install -e .[dev]
+    - name: Generate docs
+      env:
+        TREE_CONFIG_DOC_YAML_PATH: config_prop_docs.yaml
+        TREE_CONFIG_DOC_RST_PATH: source/config.rst
+      run: |
+        cd doc
+        touch $TREE_CONFIG_DOC_RST_PATH  # file must exist before first run otherwise it doesn't show
+        python -m tree_config.doc_gen download -u "https://matham.github.io/base_kivy_app/$TREE_CONFIG_DOC_YAML_PATH" -o $TREE_CONFIG_DOC_YAML_PATH
+        python -m tree_config.doc_gen download -f $TREE_CONFIG_DOC_YAML_PATH -u "https://matham.github.io/cpl_media/$TREE_CONFIG_DOC_YAML_PATH" -o $TREE_CONFIG_DOC_YAML_PATH
+
+        make html  # generate config.rst file
+        make html  # generate actual docs
+        cp $TREE_CONFIG_DOC_YAML_PATH build/html
+    - name: gh-pages upload
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        cp -r doc/build/html ~/docs_temp
+
+        git config --global user.email "moiein2000@gmail.com"
+        git config --global user.name "Matthew Einhorn"
+        git remote rm origin || true
+        git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/matham/ceed.git"
+
+        git checkout --orphan gh-pages
+        cp -r .git ~/docs_git
+        cd ..
+        rm -rf ceed
+        mkdir ceed
+        cd ceed
+        cp -r ~/docs_git .git
+        cp -r ~/docs_temp/* .
+        touch .nojekyll
+
+        git add .
+        git commit -a -m "Docs for git-$GITHUB_SHA"
+        git push origin gh-pages -f

@@ -1,0 +1,27 @@
+{
+  "ClusterView": {
+    "selected": [
+      2
+    ]
+  },
+  "FiringRateView": {
+    "x_max": 945.8
+  },
+  "TraceView": {
+    "interval": [
+      472.775,
+      473.025
+    ],
+    "scaling": 1.0
+  },
+  "WaveformView": {
+    "box_scaling": [
+      1.0,
+      1.0
+    ],
+    "probe_scaling": [
+      1.0,
+      1.0
+    ]
+  }
+}

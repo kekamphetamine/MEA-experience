@@ -1,0 +1,8 @@
+Info
+Trial Condition: Cont
+Number of Units: 3
+
+Unit Electrodes
+Unit '87a': ['D6', 'E6', 'D5']
+Unit '87b': ['K6', 'L6', 'K5', 'L5']
+Unit '95a': ['F9', 'G9', 'F8', 'G8']
