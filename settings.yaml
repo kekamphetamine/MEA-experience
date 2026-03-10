@@ -1,0 +1,21 @@
+# Media Processor Configuration
+output_settings:
+  # The desired format for the final output
+  # Options: [audio-video, video, image, audio, gif]
+  target_format: "video"
+
+  # Specific parameters based on the format selected above
+  video_params:
+    resolution: "1920x1080"
+    fps: 30
+    codec: "h264"
+
+  image_params:
+    extension: "png"
+    quality: 95
+    apply_filters: true
+
+# Metadata for the session
+user_preferences:
+  overwrite_existing: false
+  output_directory: "./exports"
